@@ -1,4 +1,4 @@
-# Contributing to Talvi's Weather Widget (TWW)
+# Contributing to Talvi's Weather Widget ( TWW )
 
 First off, thank you for considering contributing to Talvi's Weather Widget! 
 
