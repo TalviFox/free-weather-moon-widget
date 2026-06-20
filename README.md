@@ -76,7 +76,7 @@ Please play nice! Both Open-Meteo and the National Weather Service are incredibl
 - [Open-Meteo Terms of Service](https://open-meteo.com/en/terms)
 - [NWS Web API Terms of Service](https://www.weather.gov/documentation/services-web-api)
 
->.> don't piss off NASA
+\>.> don't piss off NASA
 
 ## Disclaimer
 I am not affiliated, associated, authorized, endorsed by, or in any way officially connected with the National Weather Service (NWS), Open-Meteo, NASA, or any of their subsidiaries or affiliates. All data and imagery are pulled from their respective public APIs and services.
