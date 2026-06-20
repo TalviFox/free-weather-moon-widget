@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Full Forecast - TalviFox Weather</title>
+    <style>
+        :root {
+            --bg-color: #f4f4f9;
+            --text-color: #333;
+            --card-bg: #fff;
+            --border-color: #ddd;
+            --accent-color: #3498db;
+        }
+        :root[data-theme="dark"] {
+            --bg-color: #1a1a24;
+            --text-color: #e0e0e0;
+            --card-bg: #2d2d3f;
+            --border-color: #444;
+        }
+        body { margin: 0; padding: 2rem; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg-color); color: var(--text-color); }
+        .container { max-width: 1000px; margin: 0 auto; }
+        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; border-bottom: 2px solid var(--border-color); padding-bottom: 1rem; }
+        h1 { margin: 0; font-size: 2rem; display: flex; align-items: center; gap: 10px; }
+        .current-weather { display: flex; gap: 2rem; margin-bottom: 2rem; flex-wrap: wrap; }
+        .card { background: var(--card-bg); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border-color); box-shadow: 0 4px 6px rgba(0,0,0,0.05); flex: 1; min-width: 250px; }
+        .temp-huge { font-size: 4rem; font-weight: bold; margin: 0; line-height: 1; }
+        .desc-text { font-size: 1.2rem; color: #888; margin-top: 0.5rem; margin-bottom: 1rem; }
+        .grid-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        .stat-item { display: flex; flex-direction: column; }
+        .stat-label { font-size: 0.8rem; color: #888; text-transform: uppercase; letter-spacing: 1px; }
+        .stat-value { font-size: 1.1rem; font-weight: bold; }
+        .daily-forecast { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 1rem; }
+        .day-card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 1rem; text-align: center; transition: transform 0.2s ease, box-shadow 0.2s ease; cursor: pointer; }
+        .day-card:hover { transform: scale(1.05); box-shadow: 0 8px 15px rgba(0,0,0,0.1); }
+        .day-name { font-weight: bold; margin-bottom: 0.5rem; }
+        .day-icon { font-size: 2.5rem; margin: 0.5rem 0; display: flex; justify-content: center; align-items: center; min-height: 50px; }
+        .day-temps { display: flex; justify-content: center; gap: 0.5rem; font-size: 1.1rem; }
+        .day-high { font-weight: bold; }
+        .day-low { color: #888; }
+        .nasa-moon { height: 2.5rem; width: 2.5rem; object-fit: cover; border-radius: 50%; filter: drop-shadow(0 0 4px rgba(255,255,255,0.2)); pointer-events: none; user-select: none; }
+        .loading { text-align: center; font-size: 1.5rem; margin-top: 4rem; color: #888; }
+        .error { color: #e74c3c; text-align: center; padding: 2rem; border: 1px solid #e74c3c; border-radius: 8px; margin-top: 2rem; display: none; }
+        a.back-link { color: var(--accent-color); text-decoration: none; font-weight: bold; }
+        a.back-link:hover { text-decoration: underline; }
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); backdrop-filter: blur(4px); justify-content: center; align-items: center; }
+        .modal-content { background-color: var(--card-bg); padding: 2rem; border-radius: 12px; max-width: 500px; width: 90%; box-shadow: 0 10px 25px rgba(0,0,0,0.2); position: relative; color: var(--text-color); }
+        .close-modal { position: absolute; top: 15px; right: 20px; font-size: 1.5rem; cursor: pointer; color: #888; }
+        .close-modal:hover { color: var(--text-color); }
+    </style>
+    <script>
+        (function() {
+            var theme = localStorage.getItem('weatherTheme');
+            if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.setAttribute('data-theme', 'dark');
+            } else {
+                document.documentElement.setAttribute('data-theme', 'light');
+            }
+        })();
+    </script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1 id="location-title">Loading Forecast...</h1>
+            <div style="display: flex; gap: 1rem; align-items: center;">
+                <button id="theme-toggle" style="background:none; border:none; font-size: 1.5rem; cursor: pointer; padding: 0;" title="Toggle Dark/Light Mode">🌓</button>
+                <a href="javascript:window.close();" class="back-link">Close Tab</a>
+            </div>
+        </header>
+
+        <div id="error-box" class="error">Failed to load forecast data. Please check the coordinates and try again.</div>
+
+        <div id="content" style="display: none;">
+            <div class="current-weather">
+                <div class="card" style="display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center;">
+                    <div id="current-icon" style="font-size: 4rem; margin-bottom: 1rem; display: flex; align-items: center; justify-content: center;"></div>
+                    <div id="current-temp" class="temp-huge">--°</div>
+                    <div id="current-desc" class="desc-text">--</div>
+                </div>
+                <div class="card">
+                    <h3 style="margin-top: 0; margin-bottom: 1.5rem; color: #888; font-size: 1rem; text-transform: uppercase;">Current Conditions</h3>
+                    <div class="grid-stats">
+                        <div class="stat-item"><span class="stat-label">Feels Like</span><span id="feels-like" class="stat-value">--°</span></div>
+                        <div class="stat-item"><span class="stat-label">Humidity</span><span id="humidity" class="stat-value">--%</span></div>
+                        <div class="stat-item"><span class="stat-label">Wind</span><span id="wind" class="stat-value">-- mph</span></div>
+                        <div class="stat-item"><span class="stat-label">Precipitation</span><span id="precip" class="stat-value">-- in</span></div>
+                        <div class="stat-item"><span class="stat-label">UV Index</span><span id="uv-index" class="stat-value">--</span></div>
+                        <div class="stat-item"><span class="stat-label">Pressure</span><span id="pressure" class="stat-value">-- mb</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="text-forecast-box" class="card" style="display: none; margin-bottom: 2rem;">
+                <h3 style="margin-top: 0; margin-bottom: 1rem; color: #888; font-size: 1rem; text-transform: uppercase;">Detailed Forecast</h3>
+                <div id="text-forecast-content" style="font-size: 1.1rem; line-height: 1.5;"></div>
+            </div>
+
+            <h3 style="margin-bottom: 1rem;">7-Day Extended Forecast</h3>
+            <div id="daily-grid" class="daily-forecast">
+                <!-- Daily cards injected here -->
+            </div>
+            
+            <div style="margin-top: 3rem; text-align: center; color: #888; font-size: 0.9rem;">
+                Data powered by <a href="https://weather.gov/" target="_blank" style="color: var(--accent-color); text-decoration: none;">National Weather Service</a><br>
+                Moon imagery provided by <a href="https://svs.gsfc.nasa.gov/" target="_blank" style="color: var(--accent-color); text-decoration: none;">NASA SVS</a><br>
+                &copy; 2026 TalviFox
+            </div>
+        </div>
+        <div id="loading" class="loading">Fetching live atmospheric data...</div>
+    </div>
+
+    <div id="forecast-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" id="close-modal">&times;</span>
+            <h2 id="modal-title" style="margin-top: 0;">Forecast</h2>
+            <div id="modal-text" style="font-size: 1.1rem; line-height: 1.5;"></div>
+        </div>
+    </div>
+
+    <script>
+
+        // --- Helper Functions from FTN weather.js ---
+// Calculate if it's nighttime based on local time at the location
+function isNighttime(lat, lon) {
+  if (window.DEBUG_WEATHER && window.DEBUG_WEATHER.forceNight) return true;
+
+  const now = new Date();
+  
+  try {
+    const options = { 
+      timeZone: 'America/New_York',
+      hour: 'numeric',
+      hour12: false
+    };
+    
+    const formatter = new Intl.DateTimeFormat('en-US', options);
+    const parts = formatter.formatToParts(now);
+    const hourPart = parts.find(part => part.type === 'hour');
+    const hour = parseInt(hourPart.value);
+    
+    return hour >= 19 || hour < 6;
+  } catch (e) {
+    const hour = now.getUTCHours();
+    return (hour >= 23 || hour < 10);
+  }
+}
+
+// Calculate NASA SVS moon image URL dynamically based on year
+function getNASAMoonImageURL(targetDate = new Date()) {
+  if (window.DEBUG_WEATHER && window.DEBUG_WEATHER.forceMoonFrame !== null) {
+    return `https://svs.gsfc.nasa.gov/vis/a000000/a005100/a005187/frames/730x730_1x1_30p/moon.${String(window.DEBUG_WEATHER.forceMoonFrame).padStart(4, '0')}.jpg`;
+  }
+  const year = targetDate.getUTCFullYear();
+  const svsMap = { 2024: '5187', 2025: '5415', 2026: '5587' };
+  let svsId = svsMap[year];
+  
+  if (svsId) {
+    const startOfYear = Date.UTC(year, 0, 1, 0, 0, 0);
+    const msSinceStart = targetDate.getTime() - startOfYear;
+    const hoursSinceStart = Math.floor(msSinceStart / (1000 * 60 * 60));
+    let frame = hoursSinceStart + 1;
+    const isLeap = (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0);
+    const maxFrames = isLeap ? 8784 : 8760;
+    if (frame > maxFrames) frame = maxFrames;
+    const folderPrefix = svsId.substring(0, 2);
+    return `https://svs.gsfc.nasa.gov/vis/a000000/a00${folderPrefix}00/a00${svsId}/frames/730x730_1x1_30p/moon.${String(frame).padStart(4, '0')}.jpg`;
+  } else {
+    const knownNewMoon = Date.UTC(2000, 0, 6, 18, 14);
+    const daysSinceKnownNew = (targetDate.getTime() - knownNewMoon) / (1000 * 60 * 60 * 24);
+    const synodicMonth = 29.53058867;
+    const phase = ((daysSinceKnownNew % synodicMonth) + synodicMonth) % synodicMonth / synodicMonth;
+    const newMoonFrame2024 = 252;
+    let frame = Math.round(newMoonFrame2024 + (phase * synodicMonth * 24));
+    if (frame >= 8784) frame = frame % 8784;
+    if (frame === 0) frame = 8784;
+    return `https://svs.gsfc.nasa.gov/vis/a000000/a005100/a005187/frames/730x730_1x1_30p/moon.${String(frame).padStart(4, '0')}.jpg`;
+  }
+}
+
+
+// Emoji fallback
+function getMoonPhaseEmoji(targetDate = new Date()) {
+  const knownNewMoon = Date.UTC(2000, 0, 6, 18, 14);
+  const currentTime = targetDate.getTime();
+  const daysSinceKnownNew = (currentTime - knownNewMoon) / (1000 * 60 * 60 * 24);
+  const synodicMonth = 29.53058867;
+  const phase = ((daysSinceKnownNew % synodicMonth) + synodicMonth) % synodicMonth / synodicMonth;
+  const phaseIndex = Math.floor(phase * 8) % 8;
+  
+  const moonPhases = ['🌑', '🌒', '🌓', '🌔', '🌕', '🌖', '🌗', '🌘'];
+  return moonPhases[phaseIndex];
+}
+
+// Extract weather code from NWS icon URL
+// Format: https://api.weather.gov/icons/land/day/skc?size=medium
+function extractWeatherCode(iconUrl) {
+  if (!iconUrl) return '';
+  
+  const match = iconUrl.match(/\/(day|night)\/([^?\/]+)/);
+  if (match) {
+    const timeOfDay = match[1]; // 'day' or 'night'
+    const code = match[2]; // weather code like 'skc', 'rain', etc
+    return { timeOfDay, code };
+  }
+  return null;
+}
+
+// Map NWS text descriptions and icon codes to icons
+function getWeatherIcon(description, iconUrl, lat, lon, overrideNight = null, targetDate = new Date()) {
+  const desc = description.toLowerCase();
+  let isNight = overrideNight !== null ? overrideNight : isNighttime(lat, lon);
+  
+  if (window.DEBUG_WEATHER && window.DEBUG_WEATHER.forceNight) {
+    isNight = true;
+  }
+  const weatherCode = extractWeatherCode(iconUrl);
+  
+  let weatherIcon = '';
+  
+  // NWS Icon codes (documented): 
+  // skc = sky clear, few = few clouds, sct = scattered, bkn = broken, ovc = overcast
+  // rain, snow, sleet, fzra = freezing rain, tsra = thunderstorm/rain
+  // wind_skc, wind_few, etc = windy variants
+  
+  if (isNight) {
+    // Check icon code first (more reliable), then fall back to text description
+    if (weatherCode) {
+      const code = weatherCode.code;
+      
+      if (code.includes('tsra') || code.includes('thunder')) {
+        weatherIcon = '⛈️';
+      } else if (code.includes('fzra') || code.includes('sleet')) {
+        weatherIcon = '🌨️';
+      } else if (code.includes('snow')) {
+        weatherIcon = '🌨️';
+      } else if (code.includes('rain')) {
+        weatherIcon = '🌧️';
+      } else if (code.includes('fog')) {
+        weatherIcon = '🌫️';
+      } else if (code.includes('ovc')) {
+        weatherIcon = '☁️';
+      } else if (code.includes('bkn')) {
+        weatherIcon = '☁️';
+      } else if (code.includes('sct')) {
+        weatherIcon = '☁️';
+      } else if (code.includes('few')) {
+        weatherIcon = '';
+      } else if (code.includes('skc') || code === 'clear') {
+        weatherIcon = '';
+      } else if (code.includes('wind')) {
+        weatherIcon = '💨';
+      }
+    }
+    
+    // Fallback to text description if icon code didn't match
+    if (!weatherIcon) {
+      if (desc.includes('thunderstorm') || desc.includes('t-storm') || (desc.includes('rain') && desc.includes('thunder'))) {
+        weatherIcon = '⛈️';
+      } else if (desc.includes('hail')) {
+        weatherIcon = '⛈️';
+      } else if (desc.includes('snow') || desc.includes('blizzard')) {
+        weatherIcon = '🌨️';
+      } else if (desc.includes('sleet') || desc.includes('freezing') || desc.includes('ice')) {
+        weatherIcon = '🌨️';
+      } else if (desc.includes('rain') || desc.includes('showers') || desc.includes('drizzle') || desc.includes('sprinkle')) {
+        weatherIcon = '🌧️';
+      } else if (desc.includes('fog') || desc.includes('mist') || desc.includes('haze') || desc.includes('smoke')) {
+        weatherIcon = '🌫️';
+      } else if (desc.includes('dust') || desc.includes('sand')) {
+        weatherIcon = '🌫️';
+      } else if (desc.includes('overcast')) {
+        weatherIcon = '☁️';
+      } else if (desc.includes('mostly cloudy')) {
+        weatherIcon = '☁️';
+      } else if (desc.includes('partly cloudy') || desc.includes('scattered clouds')) {
+        weatherIcon = '☁️';
+      } else if (desc.includes('cloudy')) {
+        weatherIcon = '☁️';
+      } else if (desc.includes('wind') || desc.includes('breezy') || desc.includes('gust')) {
+        weatherIcon = '💨';
+      } else if (desc.includes('clear') || desc.includes('fair') || desc.includes('mostly clear')) {
+        weatherIcon = '';
+      } else if (desc === 'na' || desc === '') {
+        weatherIcon = ''; // Clear night if no data
+      } else {
+        weatherIcon = '☁️'; // Default fallback
+      }
+    }
+    
+    // NASA moon image with emoji fallback
+    const nasaUrl = getNASAMoonImageURL(targetDate);
+    const emojiMoon = getMoonPhaseEmoji(targetDate);
+    
+    return { text: weatherIcon, isNight: true, moonUrl: nasaUrl, moonEmoji: emojiMoon };
+    
+  } else {
+    // Daytime - check icon code first
+    if (weatherCode) {
+      const code = weatherCode.code;
+      
+      if (code.includes('tsra') || code.includes('thunder')) {
+        weatherIcon = '⛈️';
+      } else if (code.includes('fzra') || code.includes('sleet')) {
+        weatherIcon = '🌨️';
+      } else if (code.includes('snow')) {
+        weatherIcon = '🌨️';
+      } else if (code.includes('rain')) {
+        weatherIcon = '🌧️';
+      } else if (code.includes('fog')) {
+        weatherIcon = '🌫️';
+      } else if (code.includes('ovc')) {
+        weatherIcon = '☁️';
+      } else if (code.includes('bkn')) {
+        weatherIcon = '🌥️';
+      } else if (code.includes('sct')) {
+        weatherIcon = '⛅';
+      } else if (code.includes('few')) {
+        weatherIcon = '🌤️';
+      } else if (code.includes('skc') || code === 'clear') {
+        weatherIcon = '☀️';
+      } else if (code.includes('wind')) {
+        weatherIcon = '💨';
+      }
+    }
+    
+    // Fallback to text description
+    if (!weatherIcon) {
+      if (desc.includes('thunderstorm') || desc.includes('t-storm') || (desc.includes('rain') && desc.includes('thunder'))) {
+        weatherIcon = '⛈️';
+      } else if (desc.includes('hail')) {
+        weatherIcon = '⛈️';
+      } else if (desc.includes('snow') || desc.includes('blizzard')) {
+        weatherIcon = '🌨️';
+      } else if (desc.includes('sleet') || desc.includes('freezing') || desc.includes('ice')) {
+        weatherIcon = '🌨️';
+      } else if (desc.includes('drizzle') || desc.includes('light rain') || desc.includes('sprinkle')) {
+        weatherIcon = '🌦️';
+      } else if (desc.includes('rain') || desc.includes('showers')) {
+        weatherIcon = '🌧️';
+      } else if (desc.includes('fog') || desc.includes('mist') || desc.includes('haze') || desc.includes('smoke')) {
+        weatherIcon = '🌫️';
+      } else if (desc.includes('dust') || desc.includes('sand')) {
+        weatherIcon = '🌫️';
+      } else if (desc.includes('overcast')) {
+        weatherIcon = '☁️';
+      } else if (desc.includes('mostly cloudy')) {
+        weatherIcon = '🌥️';
+      } else if (desc.includes('partly cloudy') || desc.includes('partly sunny') || desc.includes('scattered clouds')) {
+        weatherIcon = '⛅';
+      } else if (desc.includes('mostly clear') || desc.includes('mostly sunny')) {
+        weatherIcon = '🌤️';
+      } else if (desc.includes('cloudy')) {
+        weatherIcon = '☁️';
+      } else if (desc.includes('wind') || desc.includes('breezy') || desc.includes('gust')) {
+        weatherIcon = '💨';
+      } else if (desc.includes('clear') || desc.includes('sunny') || desc.includes('fair')) {
+        weatherIcon = '☀️';
+      } else if (desc === 'na' || desc === '') {
+        weatherIcon = '☀️'; // Default to sunny if no data
+      } else {
+        weatherIcon = '☀️'; // Changed from thermometer to sun as better default
+      }
+    }
+    
+    return { text: weatherIcon, isNight: false };
+  }
+}
+
+        // --- Main Execution ---
+        document.addEventListener('DOMContentLoaded', async () => {
+            document.getElementById('theme-toggle').addEventListener('click', () => {
+                const currentTheme = document.documentElement.getAttribute('data-theme');
+                const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+                document.documentElement.setAttribute('data-theme', newTheme);
+                localStorage.setItem('weatherTheme', newTheme);
+            });
+
+            document.getElementById('close-modal').addEventListener('click', () => {
+                document.getElementById('forecast-modal').style.display = 'none';
+            });
+            window.addEventListener('click', (e) => {
+                const modal = document.getElementById('forecast-modal');
+                if (e.target === modal) {
+                    modal.style.display = 'none';
+                }
+            });
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const lat = parseFloat(urlParams.get('lat')) || 38.27861;
+            const lon = parseFloat(urlParams.get('lon')) || -76.41389;
+            let locationName = urlParams.get('name');
+            if (!locationName) locationName = `${lat.toFixed(2)}, ${lon.toFixed(2)}`;
+
+            document.getElementById('location-title').textContent = locationName + ' Forecast';
+
+            try {
+                const pointReq = await fetch(`https://api.weather.gov/points/${lat},${lon}`, {
+                    headers: { 'User-Agent': '(TalviFox Weather Widget)' }
+                });
+                if (!pointReq.ok) throw new Error('Failed to load point data');
+                const pointData = await pointReq.json();
+                
+                const stationsReq = await fetch(pointData.properties.observationStations, {
+                    headers: { 'User-Agent': '(TalviFox Weather Widget)' }
+                });
+                if (!stationsReq.ok) throw new Error('Failed to load stations');
+                const stationsData = await stationsReq.json();
+                const nearestStation = stationsData.features[0].id;
+
+                const obsReq = await fetch(`${nearestStation}/observations/latest`, {
+                    headers: { 'User-Agent': '(TalviFox Weather Widget)' }
+                });
+                if (obsReq.ok) {
+                    const obsData = await obsReq.json();
+                    const props = obsData.properties;
+                    
+                    const tempC = props.temperature.value;
+                    const tempF = tempC !== null ? Math.round((tempC * 9/5) + 32) : '--';
+                    
+                    document.getElementById('current-temp').textContent = `${tempF}°`;
+                    
+                    const apparentC = props.heatIndex.value !== null ? props.heatIndex.value : (props.windChill.value !== null ? props.windChill.value : tempC);
+                    const apparentF = apparentC !== null ? Math.round((apparentC * 9/5) + 32) : tempF;
+                    document.getElementById('feels-like').textContent = `${apparentF}°F`;
+                    
+                    document.getElementById('humidity').textContent = props.relativeHumidity.value !== null ? `${Math.round(props.relativeHumidity.value)}%` : '--%';
+                    
+                    const windKm = props.windSpeed.value;
+                    const windMph = windKm !== null ? Math.round(windKm / 1.60934) : '--';
+                    document.getElementById('wind').textContent = `${windMph} mph`;
+                    
+                    document.getElementById('precip').textContent = `N/A`; 
+                    document.getElementById('uv-index').textContent = `N/A`; 
+                    
+                    const pressurePa = props.barometricPressure.value;
+                    const pressureMb = pressurePa !== null ? Math.round(pressurePa / 100) : '--';
+                    document.getElementById('pressure').textContent = `${pressureMb} mb`;
+
+                    const desc = props.textDescription || 'Current conditions';
+                    document.getElementById('current-desc').textContent = desc;
+
+                    const iconData = getWeatherIcon(desc, props.icon || '', lat, lon, null);
+                    const currentIconDiv = document.getElementById('current-icon');
+                    
+                    if (iconData.isNight && iconData.moonUrl) {
+                        currentIconDiv.innerHTML = iconData.text + `
+                        <svg viewBox="0 0 100 100" style="height: 1.2em; width: 1.2em; margin-left: 10px; filter: drop-shadow(0 0 4px rgba(255,255,255,0.2));">
+                            <defs><clipPath id="moon-clip-main"><circle cx="50" cy="50" r="48" /></clipPath></defs>
+                            <image href="${iconData.moonUrl}" x="-15" y="-15" width="130" height="130" clip-path="url(#moon-clip-main)" />
+                        </svg>`;
+                    } else {
+                        currentIconDiv.textContent = iconData.text || '☀️';
+                    }
+                }
+
+                const forecastReq = await fetch(pointData.properties.forecast, {
+                    headers: { 'User-Agent': '(TalviFox Weather Widget)' }
+                });
+                if (!forecastReq.ok) throw new Error('Failed to load forecast');
+                const forecastData = await forecastReq.json();
+                
+                const periods = forecastData.properties.periods;
+                window.nwsPeriods = periods;
+                
+                if (periods[0] && periods[0].detailedForecast) {
+                    document.getElementById('text-forecast-content').textContent = periods[0].detailedForecast;
+                    document.getElementById('text-forecast-box').style.display = 'block';
+                }
+
+                const dailyData = [];
+                let currentDay = null;
+                periods.forEach(p => {
+                    const dateStr = p.startTime.substring(0, 10);
+                    if (!currentDay || currentDay.dateStr !== dateStr) {
+                        currentDay = {
+                            dateStr: dateStr,
+                            dateObj: new Date(p.startTime),
+                            high: -999,
+                            low: 999,
+                            iconUrl: p.icon,
+                            shortForecast: p.shortForecast
+                        };
+                        dailyData.push(currentDay);
+                    }
+                    if (p.temperature > currentDay.high) currentDay.high = p.temperature;
+                    if (p.temperature < currentDay.low) currentDay.low = p.temperature;
+                });
+
+                const dailyGrid = document.getElementById('daily-grid');
+                dailyGrid.innerHTML = '';
+                
+                dailyData.slice(0, 7).forEach((day, i) => {
+                    const dayName = i === 0 ? 'Today' : day.dateObj.toLocaleDateString('en-US', { weekday: 'short' });
+                    const fullDayName = i === 0 ? 'Today' : day.dateObj.toLocaleDateString('en-US', { weekday: 'long' });
+                    
+                    const dIconData = getWeatherIcon(day.shortForecast, day.iconUrl, lat, lon, false, day.dateObj);
+                    let iconHtml = dIconData.text || '☀️';
+
+                    const dayCard = document.createElement('div');
+                    dayCard.className = 'day-card';
+                    dayCard.innerHTML = `
+                        <div class="day-name">${dayName}</div>
+                        <div class="day-icon" title="${day.shortForecast}">${iconHtml}</div>
+                        <div class="day-temps">
+                            <span class="day-high">H: ${day.high !== -999 ? day.high : '--'}°</span>
+                            <span class="day-low">L: ${day.low !== 999 ? day.low : '--'}°</span>
+                        </div>
+                    `;
+                    
+                    dayCard.addEventListener('click', () => {
+                        document.getElementById('modal-title').textContent = fullDayName + ' Forecast';
+                        let detailedText = day.shortForecast;
+                        
+                        const match = window.nwsPeriods.find(p => p.name === fullDayName || (fullDayName === 'Today' && (p.name === 'Today' || p.name === 'This Afternoon' || p.name === 'Tonight')));
+                        if (match) detailedText = match.detailedForecast;
+                        
+                        document.getElementById('modal-text').textContent = detailedText;
+                        document.getElementById('forecast-modal').style.display = 'flex';
+                    });
+
+                    dailyGrid.appendChild(dayCard);
+                });
+
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('content').style.display = 'block';
+
+            } catch (error) {
+                console.error(error);
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error-box').style.display = 'block';
+            }
+        });
+
+    </script>
+</body>
+</html>
