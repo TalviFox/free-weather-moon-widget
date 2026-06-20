@@ -73,6 +73,9 @@ Include the Javascript file of your choice, create a container element, and init
 ## API Usage & Rate Limits
 Please play nice! Both Open-Meteo and the National Weather Service are incredible free resources, but they have usage rules and rate limits. If you're going to fork or host this widget on a high-traffic site, please review and abide by their terms of service so we can keep these APIs free and open for everyone.
 
+- [Open-Meteo Terms of Service](https://open-meteo.com/en/terms)
+- [NWS Web API Terms of Service](https://www.weather.gov/documentation/services-web-api)
+
 ## Disclaimer
 I am not affiliated, associated, authorized, endorsed by, or in any way officially connected with the National Weather Service (NWS), Open-Meteo, NASA, or any of their subsidiaries or affiliates. All data and imagery are pulled from their respective public APIs and services.
 
